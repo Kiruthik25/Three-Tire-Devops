@@ -1,0 +1,58 @@
+namespace: three-tier
+
+imagePullSecrets:
+  - name: ecr-registry-secret
+
+frontend:
+  name: frontend
+  image: kiruthik067/microfrontend
+  tag: latest
+  replicas: 1
+  containerPort: 3000
+  service:
+    type: ClusterIP
+    port: 3000
+  env:
+    backendUrl: ""
+
+backend:
+  name: api
+  image: kiruthik067/microbackend
+  tag: latest
+  replicas: 2
+  containerPort: 3500
+  service:
+    type: ClusterIP
+    port: 3500
+  env:
+    mongoConnStr: mongodb://mongodb-svc:27017/todo?directConnection=true
+    mongoSecret:
+      name: mongo-sec
+      usernameKey: username
+      passwordKey: password
+
+mongodb:
+  name: mongodb
+  image: mongo
+  tag: 4.4.6
+  replicas: 1
+  containerPort: 27017
+
+  service:
+    name: mongodb-svc
+    type: ClusterIP
+    port: 27017
+
+  persistence:
+    enabled: true
+    claimName: mongo-volume-claim
+    accessModes:
+      - ReadWriteOnce
+    storage: 1Gi
+    storageClassName: standard 
+
+  secret:
+    name: mongo-sec
+    username: admin
+    password: password123
+

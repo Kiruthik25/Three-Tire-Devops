@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.mongodb.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.mongodb.replicas }}
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+        - name: mongo
+          image: "{{ .Values.mongodb.image }}:{{ .Values.mongodb.tag }}"
+          command:
+            - "numactl"
+            - "--interleave=all"
+            - "mongod"
+            - "--wiredTigerCacheSizeGB"
+            - "0.1"
+            - "--bind_ip"
+            - "0.0.0.0"
+          ports:
+            - containerPort: {{ .Values.mongodb.containerPort }}
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodb.secret.name }}
+                  key: username
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodb.secret.name }}
+                  key: password
+          volumeMounts:
+            - name: mongo-volume
+              mountPath: /data/db
+      volumes:
+        - name: mongo-volume
+          persistentVolumeClaim:
+            claimName: {{ .Values.mongodb.persistence.claimName }}
+

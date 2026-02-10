@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.mongodb.persistence.claimName }}
+  namespace: {{ .Values.namespace }}
+spec:
+  accessModes:
+{{- toYaml .Values.mongodb.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.mongodb.persistence.storage }}
+  storageClassName: {{ .Values.mongodb.persistence.storageClassName | quote }}
+
