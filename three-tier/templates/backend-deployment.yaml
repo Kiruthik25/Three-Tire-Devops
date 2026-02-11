@@ -24,7 +24,7 @@ spec:
       containers:
         - name: api
           image: "{{ .Values.backend.image }}:{{ .Values.backend.tag }}"
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           env:
             - name: MONGO_CONN_STR
               value: "{{ .Values.backend.env.mongoConnStr }}"
