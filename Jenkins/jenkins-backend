@@ -1,0 +1,122 @@
+pipeline {
+    agent {label 'docker-agent'}
+    tools {
+      
+        nodejs 'nodejs'
+    }
+    environment  {
+        SCANNER_HOME=tool 'sonar-scanner'
+        DOCKER_USER_NAME = credentials('ACCOUNT_ID')
+        DOCKER_REPO_NAME = credentials('DOCKER_REPO1')
+        REPOSITORY_URI = "docker.io/${DOCKER_USERNAME}/${DOCKER_REPO_NAME}"
+    }
+    stages {
+        stage('Cleaning Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+        stage('Checkout from Git') {
+            steps {
+                git branch: 'main', url: 'https://github.com/Kiruthik25/Three-Tire-Devops.git'
+            }
+        }
+        stage('Sonarqube Analysis') {
+            steps {
+                dir('Source-code/backend') {
+                    withSonarQubeEnv('sonar-server') {
+                        sh ''' $SCANNER_HOME/bin/sonar-scanner \
+                        -Dsonar.projectName=backend \
+                        -Dsonar.projectKey=backend '''
+                    }
+                }
+            }
+        }
+        stage('Quality Check') {
+            steps {
+                script {
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token' 
+                }
+            }
+        }
+        stage('OWASP Dependency-Check Scan') {
+            steps {
+                dir('Source-code/backend') {
+                    dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
+                    dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+                }
+            }
+        }
+        stage('Trivy File Scan') {
+            steps {
+                dir('Source-code/backend') {
+                    sh 'trivy fs . > trivyfs.txt'
+                }
+            }
+        }
+        stage("Docker Image Build") {
+            steps {
+                script {
+                    dir('Source-code/backend') {
+                            sh 'docker system prune -f'
+                            sh 'docker container prune -f'
+                            sh 'docker build -t $DOCKER_REPO_NAME} .'
+                    }
+                }
+            }
+        }
+        stage("Docker Image Pushing") {
+            steps {
+                script {
+                    sh '''
+                        echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+
+                        docker tag ${DOCKER_REPO_NAME} ${DOCKER_USERNAME}/${DOCKER_REPO_NAME}:${BUILD_NUMBER}
+
+                        docker push ${DOCKER_USERNAME}/${DOCKER_REPO_NAME}:${BUILD_NUMBER}
+                    '''
+                }
+            }
+        }
+
+        stage("TRIVY Image Scan") {
+            steps {
+                sh 'trivy image ${REPOSITORY_URI}${D OCKER_REPO_NAME}:${BUILD_NUMBER} > trivyimage.txt' 
+            }
+        }
+        stage('Checkout Code') {
+            steps {
+                git credentialsId: 'GITHUB', url: 'https://github.com/Kiruthik25/Three-Tire-Devops.git'
+                
+                }
+        }
+        stage('Update Deployment file') {
+            environment {
+                GIT_REPO_NAME = "Three-Tire-Devops"
+                GIT_USER_NAME = "Kiruthik25"
+            }
+            steps {
+            dir('three-tier') {
+                withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                    sh '''
+                        git config user.email "kiruthik7@gmail.com"
+                        git config user.name "Kiruthik25"
+
+                        echo "Build number: ${BUILD_NUMBER}"
+
+                        currentTag=$(grep 'tag:' values.yaml | awk '{print $2}')
+                        echo "Current tag: $currentTag"
+
+                        sed -i '/backend:/,$ s/tag:.*/tag: '"${BUILD_NUMBER}"'/' values.yaml
+
+                        git add values.yaml
+                        git commit -m "Update backend image tag to ${BUILD_NUMBER}"
+                        git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:master
+                    '''
+                }
+            }
+        }
+
+        }
+    }
+}
